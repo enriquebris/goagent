@@ -29,7 +29,7 @@ func (st *FlowdockOutput) initialize(authToken string, organization string, user
 func (st *FlowdockOutput) Send(messageType string, message string, inputData botio.Metadata, outputData botio.Metadata) error {
 	switch messageType {
 	case botio.OutputMessageTypeDefault:
-		st.messageManager.SendMessage(buildMessageData(message, st.username, inputData, outputData))
+		fmt.Println(st.messageManager.SendMessage(buildMessageData(message, st.username, inputData, outputData)))
 	case botio.OutputMessageTypeFramed:
 		messageData := buildMessageData(message, st.username, inputData, outputData)
 		messageData.Content = fmt.Sprintf("```%v```", messageData.Content)
@@ -53,7 +53,10 @@ func buildMessageData(message string, username string, inputData botio.Metadata,
 	if tags, ok := mergedMetadata["Tags"].([]string); ok {
 		ret.Tags = tags
 	}
-	ret.ThreadID = fmt.Sprintf("%v", mergedMetadata["ThreadID"])
+
+	if _, ok := mergedMetadata["ThreadID"]; ok {
+		ret.ThreadID = fmt.Sprintf("%v", mergedMetadata["ThreadID"])
+	}
 
 	return ret
 }
