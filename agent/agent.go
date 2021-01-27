@@ -4,6 +4,7 @@ import (
 	"github.com/enriquebris/goagent/cmd"
 	botio "github.com/enriquebris/goagent/io"
 	"github.com/enriquebris/goworkerpool"
+	//goworkerpool "github.com/enriquebris/goworkerpool-v2"
 	"github.com/op/go-logging"
 	"github.com/pkg/errors"
 )
