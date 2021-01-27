@@ -74,3 +74,6 @@ Stable version including:
  - Nested commands / skills
  - Parameters
  - Restrictions (by command)
+
+### v0.2.0
+- Added MSTeams input/output
