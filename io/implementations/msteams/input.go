@@ -27,9 +27,9 @@ type MSTeamsOutgoingData struct {
 	ResponseChannel *chan string
 }
 
-func NewInput() (*Input, error) {
+func NewInput(certFilePath string, keyFilePath string) (*Input, error) {
 	ret := &Input{}
-	if err := ret.initialize(":8088"); err != nil {
+	if err := ret.initialize(":443", certFilePath, keyFilePath); err != nil {
 		return nil, err
 	}
 
@@ -43,7 +43,7 @@ type Input struct {
 	msgRegexp *regexp.Regexp
 }
 
-func (st *Input) initialize(port string) error {
+func (st *Input) initialize(port string, certFilePath string, keyFilePath string) error {
 	// channel to send input messages to agent
 	st.dataToListen = make(chan MSTeamsOutgoingData, maxListenQueueCapacity)
 
@@ -55,13 +55,15 @@ func (st *Input) initialize(port string) error {
 	}
 
 	// API listeners
-	go st.initAPI(port)
+	go st.initAPI(port, certFilePath, keyFilePath)
 
 	return nil
 }
 
-func (st *Input) initAPI(port string) {
+func (st *Input) initAPI(port string, certFilePath string, keyFilePath string) {
 	router := mux.NewRouter()
+
+	// self-signed SSL cert: https://stackoverflow.com/questions/63588254/how-to-set-up-an-https-server-with-a-self-signed-certificate-in-golang
 
 	// endpoints
 	// ping
@@ -70,7 +72,9 @@ func (st *Input) initAPI(port string) {
 	router.HandleFunc("/api/v1/msteams/outgoing", st.endpointPOSTOutgoing).Methods("POST")
 
 	fmt.Println("msteams api is ready")
-	fmt.Println(http.ListenAndServe(port, router))
+	//fmt.Println(http.ListenAndServe(port, router))
+	// https://stackoverflow.com/questions/63588254/how-to-set-up-an-https-server-with-a-self-signed-certificate-in-golang
+	fmt.Println(http.ListenAndServeTLS(port, certFilePath, keyFilePath, router))
 }
 
 func (st *Input) endpointGETPing(w http.ResponseWriter, req *http.Request) {
