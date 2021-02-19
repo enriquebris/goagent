@@ -1,16 +1,17 @@
 package msteams
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"regexp"
 	"strings"
 	"time"
 
 	botio "github.com/enriquebris/goagent/io"
-	"github.com/gorilla/mux"
 )
 
 const (
@@ -41,9 +42,17 @@ type Input struct {
 	dataToListen chan MSTeamsOutgoingData
 	// message regexp
 	msgRegexp *regexp.Regexp
+
+	minTLSVersion uint16
+	headers       map[string]string
 }
 
 func (st *Input) initialize(port string, certFilePath string, keyFilePath string) error {
+	// TLS 1.0 by default
+	st.minTLSVersion = tls.VersionTLS10
+	// headers
+	st.headers = make(map[string]string)
+
 	// channel to send input messages to agent
 	st.dataToListen = make(chan MSTeamsOutgoingData, maxListenQueueCapacity)
 
@@ -60,28 +69,68 @@ func (st *Input) initialize(port string, certFilePath string, keyFilePath string
 	return nil
 }
 
+func (st *Input) SetMinTLSVersion(version uint16) {
+	st.minTLSVersion = version
+}
+
+func (st *Input) AddHeader(key, value string) {
+	st.headers[key] = value
+}
+
+func (st *Input) addAllHeaders(w http.ResponseWriter) {
+	for k, v := range st.headers {
+		w.Header().Add(k, v)
+	}
+}
+
 func (st *Input) initAPI(port string, certFilePath string, keyFilePath string) {
-	router := mux.NewRouter()
+	// generate a `Certificate` struct
+	cert, err := tls.LoadX509KeyPair(certFilePath, keyFilePath)
+	if err != nil {
+		fmt.Println(err)
+	}
 
-	// self-signed SSL cert: https://stackoverflow.com/questions/63588254/how-to-set-up-an-https-server-with-a-self-signed-certificate-in-golang
+	// create a custom server with `TLSConfig`
+	s := &http.Server{
+		Addr:    port,
+		Handler: nil, // use `http.DefaultServeMux`
+		TLSConfig: &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			MinVersion:   st.minTLSVersion, // min version: TLS 1.2
+		},
+	}
 
-	// endpoints
 	// ping
-	router.HandleFunc("/api/v1/msteams/ping", st.endpointGETPing).Methods("GET")
-	// outgoing (to receive MSTeams outgoing messages)
-	router.HandleFunc("/api/v1/msteams/outgoing", st.endpointPOSTOutgoing).Methods("POST")
+	http.HandleFunc("/api/v1/msteams/ping", st.endpointGETPing)
+	// api/v1/msteams/outgoing
+	http.HandleFunc("/api/v1/msteams/outgoing", st.endpointPOSTOutgoing)
 
-	fmt.Println("msteams api is ready")
-	//fmt.Println(http.ListenAndServe(port, router))
-	// https://stackoverflow.com/questions/63588254/how-to-set-up-an-https-server-with-a-self-signed-certificate-in-golang
-	fmt.Println(http.ListenAndServeTLS(port, certFilePath, keyFilePath, router))
+	// run server
+	log.Fatal(s.ListenAndServeTLS("", ""))
 }
 
 func (st *Input) endpointGETPing(w http.ResponseWriter, req *http.Request) {
-	outputJSON(w, http.StatusOK, OutgoingResponse{Type: "message", Text: "pong"})
+	// add headers
+	st.addAllHeaders(w)
+
+	if req.Method == "GET" {
+		outputJSON(w, http.StatusOK, OutgoingResponse{Type: "message", Text: "pong"})
+		return
+	}
+
+	w.WriteHeader(http.StatusMethodNotAllowed)
+
 }
 
 func (st *Input) endpointPOSTOutgoing(w http.ResponseWriter, req *http.Request) {
+	if req.Method != "POST" {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	// add headers
+	st.addAllHeaders(w)
+
 	b, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		fmt.Printf("[ERROR] outgoing data could not be read:  %v\n", err.Error())
