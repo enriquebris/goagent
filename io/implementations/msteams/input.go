@@ -45,6 +45,7 @@ type Input struct {
 
 	minTLSVersion uint16
 	headers       map[string]string
+	cipherSuites  []uint16
 }
 
 func (st *Input) initialize(port string, certFilePath string, keyFilePath string) error {
@@ -73,6 +74,10 @@ func (st *Input) SetMinTLSVersion(version uint16) {
 	st.minTLSVersion = version
 }
 
+func (st *Input) SetCipherSuites(suites []uint16) {
+	st.cipherSuites = suites
+}
+
 func (st *Input) AddHeader(key, value string) {
 	st.headers[key] = value
 }
@@ -90,14 +95,22 @@ func (st *Input) initAPI(port string, certFilePath string, keyFilePath string) {
 		fmt.Println(err)
 	}
 
+	// TLS configuration
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		MinVersion:   st.minTLSVersion, // min version: TLS 1.2
+	}
+	// set custom cipher suites
+	if st.cipherSuites != nil && len(st.cipherSuites) > 0 {
+		tlsConfig.PreferServerCipherSuites = true
+		tlsConfig.CipherSuites = st.cipherSuites
+	}
+
 	// create a custom server with `TLSConfig`
 	s := &http.Server{
-		Addr:    port,
-		Handler: nil, // use `http.DefaultServeMux`
-		TLSConfig: &tls.Config{
-			Certificates: []tls.Certificate{cert},
-			MinVersion:   st.minTLSVersion, // min version: TLS 1.2
-		},
+		Addr:      port,
+		Handler:   nil, // use `http.DefaultServeMux`
+		TLSConfig: tlsConfig,
 	}
 
 	// ping
